@@ -1,0 +1,216 @@
+# ReconForge Quick Start Guide
+
+## Installation
+
+### 1. Prerequisites
+- Python 3.9 or later
+- pip package manager
+- Git (optional, for cloning)
+
+### 2. Clone or Download
+```bash
+cd ReconForge
+```
+
+### 3. Install in Development Mode
+
+Install ReconForge with all dependencies:
+```bash
+pip install -e .
+```
+
+To also install development dependencies (testing, linting):
+```bash
+pip install -e ".[dev]"
+```
+
+### 4. Verify Installation
+
+Check that the CLI is available:
+```bash
+reconforge --help
+```
+
+You should see the help menu with available commands.
+
+## Basic Usage Examples
+
+### Example 1: Scan Your Local Network (192.168.1.0/24)
+
+```bash
+# Basic scan with host discovery
+reconforge scan 192.168.1.0/24
+
+# Scan with specific ports
+reconforge scan 192.168.1.0/24 --ports 22,80,443
+
+# Save results as JSON
+reconforge scan 192.168.1.0/24 --json-output results.json
+
+# Generate both JSON and HTML reports
+reconforge scan 192.168.1.0/24 \
+  --json-output results.json \
+  --html-output report.html
+```
+
+### Example 2: Scan Specific Host for Common Ports
+
+```bash
+# Scan default common ports
+reconforge ports 192.168.1.100
+
+# Scan custom port list
+reconforge ports 192.168.1.100 --ports 22,80,443,3306,5432
+
+# Scan port range
+reconforge ports 192.168.1.100 --ports 1-1024
+
+# Save to JSON
+reconforge ports 192.168.1.100 --json-output ports.json
+```
+
+### Example 3: Grab Service Banners
+
+```bash
+# Grab banner from SSH service
+reconforge banner 192.168.1.100 --port 22
+
+# Grab from multiple ports
+reconforge banner 192.168.1.100 --port 22 --port 80 --port 443
+
+# Save to JSON
+reconforge banner 192.168.1.100 --port 22 --port 80 --json-output banners.json
+```
+
+### Example 4: Generate Reports
+
+```bash
+# Generate HTML report from JSON results
+reconforge report results.json --format html --output report.html
+
+# Generate formatted JSON
+reconforge report results.json --format json --output results_formatted.json
+```
+
+## Advanced Examples
+
+### Detailed Network Scan with Custom Settings
+
+```bash
+# Scan with custom timeout and worker threads
+reconforge scan 192.168.1.0/24 \
+  --timeout 5 \
+  --workers 20 \
+  --ports 22,80,443,3306,5432,8080 \
+  --json-output scan_$(date +%s).json \
+  --html-output scan_report.html
+```
+
+### Skip Host Discovery (scan only specified targets)
+
+```bash
+# If you already know which hosts are alive, skip ping sweep
+reconforge scan 192.168.1.1 \
+  --skip-discovery \
+  --json-output direct_scan.json
+```
+
+### Test on Localhost
+
+```bash
+# Safe test: scan your own machine
+reconforge scan 127.0.0.1
+
+# Or with specific ports
+reconforge scan 127.0.0.1 --ports 22,80,443
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Set log level to DEBUG for verbose output
+export RECONFORGE_LOG_LEVEL=DEBUG
+reconforge scan 192.168.1.0/24
+
+# Set custom log directory
+export RECONFORGE_LOG_DIR=/tmp/reconforge_logs
+reconforge scan 192.168.1.0/24
+```
+
+## Running Tests
+
+If you installed with dev dependencies:
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=reconforge
+
+# Run specific test file
+pytest tests/test_targets.py
+
+# Run specific test
+pytest tests/test_targets.py::TestTargetParser::test_parse_single_ipv4
+```
+
+## Troubleshooting
+
+### Command Not Found
+If `reconforge` command is not found after installation:
+```bash
+# Try with python module
+python -m reconforge.cli --help
+
+# Or reinstall
+pip install -e .
+```
+
+### Permission Denied (on Linux/macOS)
+For ping sweep functionality, you may need elevated privileges:
+```bash
+# Run with sudo if needed
+sudo reconforge scan 192.168.1.0/24
+```
+
+### Timeout Errors
+Increase timeout if you're on a slow network:
+```bash
+reconforge scan 192.168.1.0/24 --timeout 5
+```
+
+### Connection Refused
+Not all ports will be open. This is normal behavior. Increase workers for faster scanning:
+```bash
+reconforge scan 192.168.1.0/24 --workers 20
+```
+
+## Output Files
+
+- **JSON Output**: Contains structured data suitable for parsing and integration
+- **HTML Output**: Browsable report with summary, host details, and open ports
+- **Logs**: Found in `logs/` directory (configurable via environment variable)
+
+## Legal Compliance Checklist
+
+Before running scans:
+- ✓ Verify target ownership or written authorization
+- ✓ Inform system/network administrators
+- ✓ Review local laws regarding network scanning
+- ✓ Test on your own lab network first
+- ✓ Review ReconForge source code for security assessment
+
+## Next Steps
+
+1. Review the [README.md](README.md) for complete documentation
+2. Check [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design decisions
+3. Review source code in `reconforge/` for implementation details
+4. Run tests to verify your environment
+5. Start with localhost scans for practice
+
+---
+
+**Remember**: Always get written authorization before scanning any system or network you don't own.

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReconForge Scan Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .disclaimer {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 20px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .summary-card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .summary-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        section {
+            margin-bottom: 40px;
+        }
+        
+        section h2 {
+            color: #333;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .scan-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .scan-info p {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        
+        .scan-info strong {
+            color: #667eea;
+            min-width: 150px;
+            display: inline-block;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        thead {
+            background: #667eea;
+            color: white;
+        }
+        
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .open-port {
+            background: #d4edda;
+            color: #155724;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .service-badge {
+            background: #e2e3e5;
+            color: #383d41;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            display: inline-block;
+        }
+        
+        .alive {
+            color: #28a745;
+            font-weight: 600;
+        }
+        
+        .dead {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        
+        .banner-content {
+            background: #f5f5f5;
+            border-left: 3px solid #667eea;
+            padding: 10px;
+            margin: 5px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            border-radius: 4px;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+            font-style: italic;
+        }
+        
+        footer {
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        @media (max-width: 768px) {
+            .summary {
+                grid-template-columns: 1fr;
+            }
+            
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .content {
+                padding: 15px;
+            }
+            
+            table {
+                font-size: 0.9em;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 ReconForge Scan Report</h1>
+            <p>Authorized Security Reconnaissance Results</p>
+        </header>
+        
+        <div class="disclaimer">
+            <strong>⚠️ Legal Disclaimer:</strong> This report contains results from authorized reconnaissance only.
+            Unauthorized access to computer systems is illegal. These results should only be used for authorized
+            penetration testing, security audits, or internal network assessments.
+        </div>
+        
+        <div class="content">
+            <!-- Summary Statistics -->
+            <div class="summary">
+                <div class="summary-card">
+                    <h3>Scan Duration</h3>
+                    <div class="value">{{ report.duration_seconds|round(2) }}s</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Alive Hosts</h3>
+                    <div class="value">{{ report.alive_hosts }}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Open Ports</h3>
+                    <div class="value">{{ report.total_open_ports }}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Hosts Scanned</h3>
+                    <div class="value">{{ report.hosts_count }}</div>
+                </div>
+            </div>
+            
+            <!-- Scan Information -->
+            <section>
+                <h2>Scan Information</h2>
+                <div class="scan-info">
+                    <p><strong>Target:</strong> {{ report.target }}</p>
+                    <p><strong>Scan ID:</strong> {{ report.scan_id }}</p>
+                    <p><strong>Start Time:</strong> {{ report.start_time }}</p>
+                    <p><strong>End Time:</strong> {{ report.end_time }}</p>
+                    <p><strong>Timeout:</strong> {{ report.timeout }}s</p>
+                    <p><strong>Workers:</strong> {{ report.workers }}</p>
+                    <p><strong>Scanned Ports:</strong> {{ report.ports|join(', ') }}</p>
+                </div>
+            </section>
+            
+            <!-- Discovered Hosts -->
+            <section>
+                <h2>Discovered Hosts</h2>
+                {% if report.hosts %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Status</th>
+                            <th>Open Ports</th>
+                            <th>Services</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for host in report.hosts %}
+                        <tr>
+                            <td>{{ host.ip }}</td>
+                            <td>
+                                {% if host.alive %}
+                                    <span class="alive">✓ Alive</span>
+                                {% else %}
+                                    <span class="dead">✗ Dead</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if host.open_ports %}
+                                    {% for port in host.open_ports %}
+                                        <span class="open-port">{{ port.port }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span style="color: #999;">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if host.services %}
+                                    {% for service in host.services %}
+                                        <span class="service-badge">{{ service }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span style="color: #999;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="no-data">No hosts discovered during scan</div>
+                {% endif %}
+            </section>
+            
+            <!-- Port Details -->
+            {% if report.port_details %}
+            <section>
+                <h2>Port Details</h2>
+                {% for host_ports in report.port_details %}
+                <h3>{{ host_ports.host }}</h3>
+                {% if host_ports.ports %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Port</th>
+                            <th>Service</th>
+                            <th>Status</th>
+                            <th>Banner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for port in host_ports.ports %}
+                        <tr>
+                            <td><strong>{{ port.port }}</strong></td>
+                            <td>{{ port.service or '-' }}</td>
+                            <td>
+                                {% if port.open %}
+                                    <span class="open-port">OPEN</span>
+                                {% else %}
+                                    <span style="color: #999;">Closed</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if port.banner %}
+                                    <div class="banner-content">{{ port.banner|truncate(100) }}</div>
+                                {% else %}
+                                    <span style="color: #999;">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="no-data">No port details available</div>
+                {% endif %}
+                {% endfor %}
+            </section>
+            {% endif %}
+        </div>
+        
+        <footer>
+            <p>Generated by ReconForge v0.1 | Authorized Security Reconnaissance Toolkit</p>
+            <p>Use this tool responsibly and only on systems you have permission to test.</p>
+        </footer>
+    </div>
+</body>
+</html>
