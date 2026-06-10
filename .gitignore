@@ -127,6 +127,7 @@ dmypy.json
 .DS_Store
 
 # ReconForge specific
+.reconforge/
 logs/
 *.html
 scan_results.json

@@ -87,9 +87,12 @@ reconforge banner 192.168.1.100 --port 22
 # Check authorized HTTP/TLS configuration
 reconforge http example.com --port 443 --https
 
-# Generate HTML report
-reconforge report scan_results.json --format html
+# View cumulative results and generate a timestamped report
+reconforge results
+reconforge report
 ```
+
+ReconForge automatically appends successful reconnaissance results to `.reconforge/session/results.json`. Running `reconforge report` without arguments generates a cumulative report in `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html`.
 
 ---
 
@@ -196,21 +199,49 @@ reconforge http 127.0.0.1 --port 80
 reconforge http example.com --port 443 --https --json-output http_tls.json
 ```
 
-### `reconforge report <JSON-FILE>`
+### `reconforge results`
 
-Generate reports from previous scan results.
-
-**Options:**
-- `--format FORMAT` - Output format: `html` or `json` (default: html)
-- `--output FILE` - Output file path (default: auto-generated)
+Show a short summary of the current cumulative results store.
 
 **Examples:**
 ```bash
-# Generate HTML from JSON
-reconforge report scan_results.json --format html --output report.html
+reconforge results
+```
 
-# Re-format JSON
-reconforge report scan_results.json --format json --output formatted.json
+### `reconforge report`
+
+Generate a cumulative report from `.reconforge/session/results.json`.
+
+**Options:**
+- `--input FILE` - Use a custom cumulative results JSON file
+- `--format FORMAT` - Output format: `html` or `json` (default: html)
+- `--output FILE` - Output file path (default: timestamped file under `reports/`)
+- `--clear` - Clear `.reconforge/session/results.json` after successful report generation
+- `--summary-only` - Generate only summary data
+
+**Examples:**
+```bash
+# Generate timestamped HTML from all stored results
+reconforge report
+
+# Generate timestamped JSON from all stored results
+reconforge report --format json
+
+# Generate a custom report and clear the session after success
+reconforge report --output reports/internal_review.html --clear
+
+# Use a custom cumulative results file
+reconforge report --input .reconforge/session/results.json --format html
+```
+
+### `reconforge clear-results`
+
+Clear the cumulative results store after confirmation.
+
+**Examples:**
+```bash
+reconforge clear-results
+reconforge clear-results --yes
 ```
 
 ---
@@ -238,16 +269,21 @@ reconforge banner 192.168.1.100 --port 22 --port 80 --port 443
 ### Example 3: Generate Professional Reports
 
 ```bash
-# Perform scan and generate reports
-reconforge scan 192.168.1.0/24 \
-  --json-output results.json \
-  --html-output security_audit.html
+# Run multiple authorized checks; each result is stored automatically
+reconforge scan 192.168.1.0/24
+reconforge ports 192.168.1.10
+reconforge banner 192.168.1.10 --port 22
+reconforge http example.com --port 443 --https
+
+# Review the cumulative session and generate a timestamped report
+reconforge results
+reconforge report
 
 # Open report in browser (on Windows)
-start security_audit.html
+start reports
 
 # On Linux/macOS
-open security_audit.html
+open reports
 ```
 
 ### Example 4: Safe Local Testing
@@ -273,9 +309,8 @@ reconforge http internal.example.com --port 443 --https --json-output http_tls.j
 reconforge scan 10.0.0.0/24 \
   --timeout 5 \
   --workers 20 \
-  --ports 21,22,23,25,53,80,110,139,143,443,445,3306,3389,5432,8080 \
-  --json-output "lab_scan_$(date +%s).json" \
-  --html-output "lab_report_$(date +%Y%m%d).html"
+  --ports 21,22,23,25,53,80,110,139,143,443,445,3306,3389,5432,8080
+reconforge report --clear
 ```
 
 ---
@@ -301,6 +336,34 @@ When no port list is specified, ReconForge scans these service ports:
 5432 (PostgreSQL)
 8080 (HTTP-Alt)
 ```
+
+---
+
+## Automatic Results Storage
+
+ReconForge keeps a cumulative session file at `.reconforge/session/results.json`. Every successful `scan`, `ports`, `banner`, and `http` command appends a new entry while preserving previous results.
+
+Generated cumulative reports are written to:
+
+```text
+reports/reconforge_report_<YYYYMMDD_HHMMSS>.html
+reports/reconforge_report_<YYYYMMDD_HHMMSS>.json
+```
+
+Useful workflow:
+
+```bash
+reconforge scan 192.168.1.0/24
+reconforge ports 192.168.1.10
+reconforge banner 192.168.1.10 --port 22
+reconforge http example.com --port 443 --https
+reconforge results
+reconforge report
+```
+
+Use `reconforge report --clear` to clear the cumulative store after a successful report, or `reconforge clear-results` / `reconforge clear-results --yes` to reset it manually.
+
+Explicit `--json-output` files are still supported for individual commands, but they are optional.
 
 ---
 

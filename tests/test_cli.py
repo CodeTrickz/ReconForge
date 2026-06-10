@@ -36,6 +36,7 @@ def test_html_template_is_package_data():
 
 
 def test_http_command_outputs_table_and_json(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     output_file = tmp_path / "http.json"
 
     class FakeHTTPAnalyzer:

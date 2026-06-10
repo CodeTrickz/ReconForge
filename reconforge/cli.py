@@ -18,6 +18,14 @@ from reconforge.core import (
     PortScanResult,
 )
 from reconforge.core.config import DEFAULT_PORTS, DEFAULT_CONNECT_TIMEOUT, DEFAULT_WORKERS
+from reconforge.core.paths import RESULTS_JSON, timestamped_report_path
+from reconforge.core.results_store import (
+    append_result,
+    build_summary,
+    clear_results_store,
+    load_results_store,
+    load_results_store_from_path,
+)
 from reconforge.recon import HostDiscovery, PortScanner, BannerGrabber, HTTPAnalyzer
 from reconforge.reporting import JSONReporter, HTMLReporter
 
@@ -278,6 +286,14 @@ def scan(
                 if host.open_ports:
                     ports_str = ", ".join([str(p.port) for p in host.open_ports])
                     typer.echo(f"  {host.ip_address}: {ports_str}")
+
+        append_result(
+            "scan",
+            target,
+            scan_report.model_dump(mode="json", exclude_none=True),
+            command=f"reconforge scan {target}",
+        )
+        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
         
         # Save reports
         if json_output:
@@ -372,6 +388,14 @@ def ports(
                     typer.echo(f"  {port.port:5d}{service}")
         else:
             typer.echo("\n[-] No open ports found")
+
+        append_result(
+            "ports",
+            host,
+            result.model_dump(mode="json", exclude_none=True),
+            command=f"reconforge ports {original_host}",
+        )
+        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
         
         # Save JSON if requested
         if json_output:
@@ -461,6 +485,14 @@ def banner(
                         typer.echo(f"    {key}: {value}")
         else:
             typer.echo("\n[-] No banners grabbed")
+
+        append_result(
+            "banner",
+            host,
+            result.model_dump(mode="json", exclude_none=True),
+            command=f"reconforge banner {original_host}",
+        )
+        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
         
         # Save JSON if requested
         if json_output:
@@ -556,6 +588,14 @@ def http(
 
         _print_table(rows)
 
+        append_result(
+            "http",
+            host,
+            result.model_dump(mode="json", exclude_none=True),
+            command=f"reconforge http {host}",
+        )
+        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
+
         if json_output:
             JSONReporter.report_http(result, json_output)
             typer.echo(f"\n[+] Results saved to {json_output}")
@@ -573,58 +613,84 @@ def http(
 
 @app.command()
 def report(
-    input_file: Path = typer.Argument(
-        ...,
-        help="Input JSON report file from previous scan"
+    input_file: Optional[Path] = typer.Option(
+        None,
+        "--input",
+        help="Input cumulative results JSON file"
     ),
     output_file: Optional[Path] = typer.Option(
         None,
         "--output",
-        help="Output file path (defaults to input_file.html or .json)"
+        help="Output report path"
     ),
     format: str = typer.Option(
         "html",
         "--format",
         help="Output format: html or json"
     ),
+    clear: bool = typer.Option(
+        False,
+        "--clear",
+        help="Clear the default results store after successful report generation"
+    ),
+    summary_only: bool = typer.Option(
+        False,
+        "--summary-only",
+        help="Generate only the summary, without per-result detail sections"
+    ),
 ):
-    """Generate reports from scan results.
+    """Generate a report from the cumulative results store.
     
     Examples:
-        reconforge report scan_results.json --format html --output report.html
-        reconforge report scan_results.json --format json
+        reconforge report
+        reconforge report --format json
+        reconforge report --input .reconforge/session/results.json --clear
     """
     print_banner()
     
     try:
-        if not input_file.exists():
-            typer.echo(f"[!] Input file not found: {input_file}", err=True)
-            raise typer.Exit(1)
-        if format.lower() not in {"html", "json"}:
+        normalized_format = format.lower()
+        if normalized_format not in {"html", "json"}:
             typer.echo(f"[!] Unknown format: {format}. Use 'html' or 'json'.", err=True)
             raise typer.Exit(1)
-        
-        # Determine output file
-        if not output_file:
-            if format == "html":
-                output_file = input_file.with_suffix(".html")
-            else:
-                output_file = input_file.with_stem(input_file.stem + "_report")
-        
-        typer.echo(f"[*] Reading report from: {input_file}")
-        typer.echo(f"[*] Generating {format.upper()} report...")
-        
-        # Generate appropriate report
-        if format.lower() == "html":
-            HTMLReporter.report_from_json(input_file, output_file)
+
+        source_path = input_file or RESULTS_JSON
+        if input_file:
+            if not input_file.exists():
+                typer.echo(f"[!] Input file not found: {input_file}", err=True)
+                raise typer.Exit(1)
+            store = load_results_store_from_path(input_file)
         else:
-            # Copy and re-validate JSON
-            with open(input_file, "r") as f:
-                data = json.load(f)
-            with open(output_file, "w") as f:
-                json.dump(data, f, indent=2, default=str)
+            store = load_results_store()
+
+        if not store.get("results"):
+            typer.echo(
+                "No ReconForge results found. Run one or more recon commands first, "
+                "then run `reconforge report`.",
+                err=True,
+            )
+            raise typer.Exit(1)
+        
+        if not output_file:
+            output_file = timestamped_report_path(normalized_format)
+        
+        store["summary"] = build_summary(store)
+        typer.echo(f"[*] Reading results from: {source_path}")
+        typer.echo(f"[*] Generating {normalized_format.upper()} report...")
+        
+        if normalized_format == "html":
+            HTMLReporter.report_results_store(store, output_file, summary_only=summary_only)
+        else:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            report_data = {"summary": store["summary"]} if summary_only else store
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(report_data, f, indent=2, default=str)
         
         typer.echo(f"\n[+] Report saved to: {output_file}")
+
+        if clear:
+            clear_results_store()
+            typer.echo(f"[+] Cleared results store: {RESULTS_JSON}")
         
     except typer.Exit:
         raise
@@ -635,9 +701,64 @@ def report(
 
 
 @app.command()
+def results():
+    """Show a short summary of the cumulative results store."""
+    try:
+        store = load_results_store()
+        summary = store.get("summary", {})
+        counts = summary.get("result_counts", {})
+
+        typer.echo("\n" + "=" * 60)
+        typer.echo("RECONFORGE RESULTS STORE")
+        typer.echo("=" * 60)
+        rows = [
+            ["Field", "Value"],
+            ["Session ID", str(store.get("session_id", "-"))],
+            ["Created At", str(store.get("created_at", "-"))],
+            ["Updated At", str(store.get("updated_at", "-"))],
+            ["Total Results", str(summary.get("total_results", 0))],
+            ["Unique Targets", str(summary.get("unique_targets", 0))],
+            [
+                "Counts By Type",
+                ", ".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "-",
+            ],
+        ]
+        _print_table(rows)
+    except Exception as e:
+        typer.echo(f"[!] Error: {e}", err=True)
+        logger.exception("Results summary failed")
+        raise typer.Exit(1)
+
+
+@app.command("clear-results")
+def clear_results(
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Clear without asking for confirmation"
+    )
+):
+    """Clear the cumulative results store."""
+    try:
+        if not yes and not typer.confirm(f"Clear ReconForge results store at {RESULTS_JSON}?"):
+            typer.echo("Aborted.")
+            raise typer.Exit(0)
+
+        clear_results_store()
+        typer.echo(f"[+] Cleared results store: {RESULTS_JSON}")
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.echo(f"[!] Error: {e}", err=True)
+        logger.exception("Clear results failed")
+        raise typer.Exit(1)
+
+
+@app.command()
 def version():
     """Show ReconForge version."""
-    typer.echo("ReconForge v0.1.0")
+    typer.echo("ReconForge v0.1.1b0")
     typer.echo("Authorized Security Reconnaissance Toolkit")
 
 

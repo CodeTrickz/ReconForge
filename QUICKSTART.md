@@ -35,6 +35,19 @@ You should see the help menu with available commands.
 
 ## Basic Usage Examples
 
+ReconForge keeps a cumulative results store at `.reconforge/session/results.json`. You can run several authorized reconnaissance commands and then generate one combined report:
+
+```bash
+reconforge scan 192.168.1.0/24
+reconforge ports 192.168.1.10
+reconforge banner 192.168.1.10 --port 22
+reconforge http example.com --port 443 --https
+reconforge results
+reconforge report
+```
+
+Reports are written to `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.json`. Use `reconforge report --clear` after a successful report, or `reconforge clear-results`, when you want to reset the session.
+
 ### Example 1: Scan Your Local Network (192.168.1.0/24)
 
 ```bash
@@ -44,13 +57,11 @@ reconforge scan 192.168.1.0/24
 # Scan with specific ports
 reconforge scan 192.168.1.0/24 --ports 22,80,443
 
-# Save results as JSON
+# Save an explicit JSON copy if needed
 reconforge scan 192.168.1.0/24 --json-output results.json
 
-# Generate both JSON and HTML reports
-reconforge scan 192.168.1.0/24 \
-  --json-output results.json \
-  --html-output report.html
+# Successful commands are also appended automatically to:
+# .reconforge/session/results.json
 ```
 
 ### Example 2: Scan Specific Host for Common Ports
@@ -82,14 +93,34 @@ reconforge banner 192.168.1.100 --port 22 --port 80 --port 443
 reconforge banner 192.168.1.100 --port 22 --port 80 --json-output banners.json
 ```
 
-### Example 4: Generate Reports
+### Example 4: Analyze HTTP/TLS Configuration
 
 ```bash
-# Generate HTML report from JSON results
-reconforge report results.json --format html --output report.html
+# Check authorized HTTP/TLS metadata with HEAD requests only
+reconforge http example.com --port 443 --https
 
-# Generate formatted JSON
-reconforge report results.json --format json --output results_formatted.json
+# Save an explicit JSON copy if needed
+reconforge http example.com --port 443 --https --json-output http_tls.json
+```
+
+### Example 5: Review Stored Results and Generate Reports
+
+```bash
+# Show the current cumulative session summary
+reconforge results
+
+# Generate a timestamped HTML report under reports/
+reconforge report
+
+# Generate timestamped JSON under reports/
+reconforge report --format json
+
+# Generate a report and clear .reconforge/session/results.json after success
+reconforge report --clear
+
+# Clear manually
+reconforge clear-results
+reconforge clear-results --yes
 ```
 
 ## Advanced Examples
@@ -101,9 +132,8 @@ reconforge report results.json --format json --output results_formatted.json
 reconforge scan 192.168.1.0/24 \
   --timeout 5 \
   --workers 20 \
-  --ports 22,80,443,3306,5432,8080 \
-  --json-output scan_$(date +%s).json \
-  --html-output scan_report.html
+  --ports 22,80,443,3306,5432,8080
+reconforge report
 ```
 
 ### Skip Host Discovery (scan only specified targets)
@@ -190,8 +220,10 @@ reconforge scan 192.168.1.0/24 --workers 20
 
 ## Output Files
 
-- **JSON Output**: Contains structured data suitable for parsing and integration
-- **HTML Output**: Browsable report with summary, host details, and open ports
+- **Cumulative Store**: `.reconforge/session/results.json`
+- **Timestamped Reports**: `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.json`
+- **Explicit JSON Output**: Optional command-specific files from `--json-output`
+- **Explicit HTML Output**: Optional command-specific files from `--html-output`
 - **Logs**: Found in `logs/` directory (configurable via environment variable)
 
 ## Legal Compliance Checklist

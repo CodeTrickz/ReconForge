@@ -14,6 +14,7 @@ from reconforge.core.models import (
     PortListResult,
 )
 from reconforge.core.targets import TargetParser
+from reconforge.core.results_store import append_result, build_summary, clear_results_store, load_results_store
 
 __all__ = [
     "setup_logging",
@@ -29,4 +30,8 @@ __all__ = [
     "DiscoveryResult",
     "PortListResult",
     "TargetParser",
+    "append_result",
+    "build_summary",
+    "clear_results_store",
+    "load_results_store",
 ]
