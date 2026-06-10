@@ -41,7 +41,7 @@ ReconForge v0.1 focuses on **safe, legal reconnaissance and reporting**:
 
 ### Reconnaissance Capabilities
 - **Host Discovery**: Platform-aware ping sweep for active host detection
-- **Port Scanning**: TCP connect scanning (no raw packets, no stealth)
+- **Port Scanning**: Async TCP connect scanning with bounded concurrency (no raw packets, no stealth)
 - **Banner Grabbing**: Safe service identification through banner analysis
 - **HTTP/TLS Analysis**: Passive status, redirect, security header, and certificate checks
 - **Target Parsing**: Support for IPv4 addresses, CIDR ranges, and hostnames
@@ -49,7 +49,7 @@ ReconForge v0.1 focuses on **safe, legal reconnaissance and reporting**:
 
 ### Why This Approach?
 - **No Exploitation**: Zero exploit code
-- **No Bruteforce**: Single connection per port
+- **No Bruteforce**: Single TCP connect attempt per port
 - **No Stealth**: Visible connections for audit trails
 - **No Evasion**: Direct connections without IDS/IPS bypass
 - **No Credentials**: No credential harvesting
@@ -132,10 +132,12 @@ reconforge scan 192.168.1.1 --skip-discovery
 
 Scan for open ports on a specific target.
 
+The public CLI is unchanged. Internally, port scans use `asyncio` with bounded concurrency; `--workers` controls the maximum number of concurrent TCP connect attempts.
+
 **Options:**
 - `--ports LIST` - Ports to scan (e.g., 22,80,443 or 1-1024)
 - `--timeout SECONDS` - Connection timeout (default: 2.0)
-- `--workers N` - Parallel workers (default: 5)
+- `--workers N` - Maximum concurrent TCP connect attempts (default: 5)
 - `--json-output FILE` - Save results to JSON
 
 **Examples:**

@@ -80,6 +80,8 @@ reconforge ports 192.168.1.100 --ports 1-1024
 reconforge ports 192.168.1.100 --json-output ports.json
 ```
 
+Port scans use async TCP connect checks with bounded concurrency. The CLI remains the same; `--workers` controls the maximum number of concurrent connection attempts.
+
 ### Example 3: Grab Service Banners
 
 ```bash
@@ -217,6 +219,8 @@ Not all ports will be open. This is normal behavior. Increase workers for faster
 ```bash
 reconforge scan 192.168.1.0/24 --workers 20
 ```
+
+For port scanning, `--workers` changes concurrency only. ReconForge still uses normal TCP connect checks and does not use raw packets, stealth scans, evasion, or exploit payloads.
 
 ## Output Files
 

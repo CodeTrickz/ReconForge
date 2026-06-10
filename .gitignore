@@ -133,3 +133,4 @@ logs/
 scan_results.json
 reports/
 temp/
+prompts/

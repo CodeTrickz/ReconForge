@@ -758,7 +758,7 @@ def clear_results(
 @app.command()
 def version():
     """Show ReconForge version."""
-    typer.echo("ReconForge v0.1.1b0")
+    typer.echo("ReconForge v0.1.1b1")
     typer.echo("Authorized Security Reconnaissance Toolkit")
 
 

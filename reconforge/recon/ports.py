@@ -1,7 +1,6 @@
 """TCP port scanning module for ReconForge."""
 
-import socket
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
 from typing import List, Optional
 
 from reconforge.core.config import DEFAULT_PORTS
@@ -12,7 +11,7 @@ logger = get_logger(__name__)
 
 
 class PortScanner:
-    """Scan TCP ports using socket connect."""
+    """Scan TCP ports using bounded asynchronous TCP connect calls."""
     
     # Common service port mappings
     SERVICE_PORTS = {
@@ -44,14 +43,43 @@ class PortScanner:
         Args:
             timeout: Connection timeout in seconds
         """
+        if timeout <= 0:
+            raise ValueError("Timeout must be positive")
         self.timeout = timeout
+
+    @staticmethod
+    def _validate_host(host: str) -> None:
+        if not isinstance(host, str) or not host.strip():
+            raise ValueError("Host must be a non-empty string")
+
+    @staticmethod
+    def _validate_workers(workers: int) -> None:
+        if workers < 1:
+            raise ValueError("Workers must be at least 1")
+
+    @staticmethod
+    def _normalize_ports(ports: Optional[List[int]]) -> List[int]:
+        if ports is None:
+            ports = DEFAULT_PORTS
+
+        normalized = sorted(set(ports))
+        for port in normalized:
+            if not isinstance(port, int) or port < 1 or port > 65535:
+                raise ValueError(f"Invalid port: {port}. Use ports in range 1-65535.")
+        return normalized
     
-    def _scan_port(self, host: str, port: int) -> PortScanResult:
-        """Scan a single port on a host.
+    async def _scan_port_async(
+        self,
+        host: str,
+        port: int,
+        semaphore: asyncio.Semaphore,
+    ) -> PortScanResult:
+        """Scan a single port on a host with an async TCP connect.
         
         Args:
             host: Target IP address
             port: Port number to scan
+            semaphore: Concurrency limiter
             
         Returns:
             PortScanResult with scan results
@@ -61,26 +89,36 @@ class PortScanner:
             open=False,
             service=self.SERVICE_PORTS.get(port),
         )
-        
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(self.timeout)
-            
+
+        async with semaphore:
+            writer = None
             try:
-                # Attempt TCP connection
-                sock.connect((host, port))
+                _reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port),
+                    timeout=self.timeout,
+                )
                 result.open = True
                 logger.debug(f"Port {port} on {host} is open")
-            except (socket.timeout, ConnectionRefusedError, OSError):
+            except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
                 result.open = False
             finally:
-                sock.close()
-        
-        except Exception as e:
-            logger.debug(f"Error scanning {host}:{port}: {e}")
-            result.open = False
-        
+                if writer is not None:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+
         return result
+
+    async def _scan_async(self, host: str, ports: List[int], workers: int) -> List[PortScanResult]:
+        """Scan ports asynchronously using bounded concurrency."""
+        semaphore = asyncio.Semaphore(min(workers, len(ports)))
+        tasks = [
+            self._scan_port_async(host, port, semaphore)
+            for port in ports
+        ]
+        return await asyncio.gather(*tasks)
     
     def scan(
         self,
@@ -98,37 +136,20 @@ class PortScanner:
         Returns:
             PortListResult with all scan results
         """
-        if ports is None:
-            ports = DEFAULT_PORTS
-        
-        ports = sorted(set(ports))  # Remove duplicates and sort
+        self._validate_host(host)
+        self._validate_workers(workers)
+        ports = self._normalize_ports(ports)
         logger.info(f"Scanning {len(ports)} ports on {host}")
         
-        open_ports: List[PortScanResult] = []
-
         if not ports:
             return PortListResult(
                 target=host,
                 open_ports=[],
                 scanned_ports=[],
             )
-        
-        with ThreadPoolExecutor(max_workers=min(workers, len(ports))) as executor:
-            # Submit all scan tasks
-            futures = {
-                executor.submit(self._scan_port, host, port): port
-                for port in ports
-            }
-            
-            # Collect results
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    if result.open:
-                        open_ports.append(result)
-                except Exception as e:
-                    port = futures[future]
-                    logger.error(f"Error scanning port {port}: {e}")
+
+        results = asyncio.run(self._scan_async(host, ports, workers))
+        open_ports = [result for result in results if result.open]
         
         logger.info(f"Found {len(open_ports)} open ports on {host}")
         

@@ -57,7 +57,7 @@ Reporters:
 
 ### 1. No Raw Sockets
 
-**Decision**: Use Python's standard `socket` library with TCP connect scans only.
+**Decision**: Use Python's standard `asyncio` TCP connection APIs with TCP connect scans only.
 
 **Rationale**:
 - Raw socket scanning requires elevated privileges and specialized knowledge
@@ -138,9 +138,9 @@ Reporters:
 **Purpose**: Identify open ports on target hosts.
 
 **Implementation**:
-- TCP connect scanning using standard sockets
+- TCP connect scanning using `asyncio.open_connection`
 - Service identification via known port mappings
-- Parallel port scanning with ThreadPoolExecutor
+- Bounded concurrency with `asyncio.Semaphore`; CLI `--workers` sets the concurrency limit
 - No banner grabbing in this module (separate concern)
 
 **Why not SYN scan**:
@@ -272,9 +272,9 @@ Full type annotations throughout:
 
 ## Performance Considerations
 
-### Threading Model
+### Concurrency Model
 - `HostDiscovery`: 1 thread per host (up to `workers` limit)
-- `PortScanner`: 1 thread per port (up to `workers` limit)
+- `PortScanner`: async TCP connect tasks up to the `workers` concurrency limit
 - `BannerGrabber`: 1 thread per port (up to `workers` limit)
 
 ### Timeout Tuning
@@ -285,7 +285,7 @@ Full type annotations throughout:
 ### Scaling
 - Default workers: 5 (conservative)
 - Can increase to 20-50 for large networks
-- Thread overhead is minimal for I/O-bound operations
+- Port scans avoid per-port thread overhead by using bounded asyncio concurrency
 
 ## Legal Compliance
 

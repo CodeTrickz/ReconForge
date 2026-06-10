@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconforge"
-version = "0.1.1b0"
+version = "0.1.1b1"
 description = "A legal, modular cybersecurity reconnaissance toolkit for authorized pentests and security audits"
 readme = "README.md"
 requires-python = ">=3.9"
