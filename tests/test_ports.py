@@ -166,7 +166,6 @@ class TestPortScannerPortDetection:
     def test_service_identification(self, scanner):
         """Test service identification for known ports."""
         result = scanner.scan("127.0.0.1", ports=[22, 80, 443])
-        port_services = {p.port: p.service for p in result.open_ports}
         
         # Check that services are recognized
         for port in [22, 80, 443]:

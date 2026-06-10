@@ -2,7 +2,6 @@
 
 import logging
 import logging.handlers
-from pathlib import Path
 
 from reconforge.core.config import LOG_DIR, LOG_FORMAT, LOG_LEVEL
 

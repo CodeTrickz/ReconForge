@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from reconforge.core.paths import RESULTS_JSON, ensure_runtime_dirs, timestamp_iso, timestamp_slug
+from reconforge.core.risk_tags import classify_result
 
 
 def _new_store() -> dict:
@@ -16,7 +17,7 @@ def _new_store() -> dict:
         "created_at": now,
         "updated_at": now,
         "tool": "ReconForge",
-        "version": "0.1.1b1",
+        "version": "0.1.1b2",
         "results": [],
         "summary": {},
     }
@@ -39,7 +40,7 @@ def load_results_store() -> dict:
     store.setdefault("session_id", timestamp_slug())
     store.setdefault("created_at", timestamp_iso())
     store.setdefault("tool", "ReconForge")
-    store.setdefault("version", "0.1.1b1")
+    store.setdefault("version", "0.1.1b2")
     store.setdefault("results", [])
     store["summary"] = build_summary(store)
     store.setdefault("updated_at", store["created_at"])
@@ -62,6 +63,7 @@ def append_result(
 ) -> None:
     """Append a reconnaissance result to the cumulative session store."""
     store = load_results_store()
+    risk_tags = classify_result(result_type, target, data)
     store["results"].append(
         {
             "id": str(uuid.uuid4()),
@@ -70,6 +72,7 @@ def append_result(
             "target": target,
             "command": command,
             "data": data,
+            "risk_tags": risk_tags,
         }
     )
     store["updated_at"] = timestamp_iso()
@@ -88,17 +91,35 @@ def build_summary(store: dict) -> dict:
     """Build summary counts from a cumulative results store."""
     results = store.get("results", [])
     result_counts = Counter(item.get("type", "unknown") for item in results)
+    risk_counts = Counter()
+    total_risk_tags = 0
     targets = sorted({item.get("target") for item in results if item.get("target")})
 
     target_counts: Dict[str, int] = Counter(
         item.get("target") for item in results if item.get("target")
     )
 
+    for item in results:
+        tags = item.get("risk_tags")
+        if tags is None:
+            tags = classify_result(
+                item.get("type", "unknown"),
+                item.get("target", "-"),
+                item.get("data", {}),
+            )
+        total_risk_tags += len(tags)
+        risk_counts.update(tag.get("severity", "informational") for tag in tags)
+
     return {
         "total_results": len(results),
         "unique_targets": len(targets),
         "targets": targets,
         "result_counts": dict(sorted(result_counts.items())),
+        "total_risk_tags": total_risk_tags,
+        "risk_counts": {
+            severity: risk_counts.get(severity, 0)
+            for severity in ["low", "medium", "high"]
+        },
         "targets_summary": [
             {"target": target, "result_count": count}
             for target, count in sorted(target_counts.items())

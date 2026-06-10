@@ -48,6 +48,10 @@ reconforge report
 
 Reports are written to `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.json`. Use `reconforge report --clear` after a successful report, or `reconforge clear-results`, when you want to reset the session.
 
+Reports include informational low/medium/high risk tags for observed metadata such as open ports, banners, TLS certificate expiry, and missing HTTP security headers. These are defensive review hints only and do not involve exploit logic.
+
+No commands or flags changed. The only output change is that JSON/HTML reports include risk tag data.
+
 ### Example 1: Scan Your Local Network (192.168.1.0/24)
 
 ```bash
@@ -226,6 +230,7 @@ For port scanning, `--workers` changes concurrency only. ReconForge still uses n
 
 - **Cumulative Store**: `.reconforge/session/results.json`
 - **Timestamped Reports**: `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.json`
+- **Risk Tags**: Stored per result under `risk_tags`, with summary counts in report JSON
 - **Explicit JSON Output**: Optional command-specific files from `--json-output`
 - **Explicit HTML Output**: Optional command-specific files from `--html-output`
 - **Logs**: Found in `logs/` directory (configurable via environment variable)

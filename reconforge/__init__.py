@@ -7,7 +7,7 @@ pentests, homelabs, CTFs, and internal security audits.
 you have explicit written authorization.
 """
 
-__version__ = "0.1.1b1"
+__version__ = "0.1.1b2"
 __author__ = "ReconForge Team"
 __license__ = "MIT"
 

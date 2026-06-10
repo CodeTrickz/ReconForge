@@ -9,7 +9,8 @@ from typing import Union, Dict, Any
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from reconforge.core.logging import get_logger
-from reconforge.core.models import ScanReport, PortScanResult
+from reconforge.core.models import ScanReport
+from reconforge.core.risk_tags import classify_result
 
 logger = get_logger(__name__)
 
@@ -331,6 +332,27 @@ class HTMLReporter:
         return "\n".join(sections)
 
     @staticmethod
+    def _risk_rows(store: dict) -> list:
+        rows = []
+        for item in store.get("results", []):
+            tags = item.get("risk_tags")
+            if tags is None:
+                tags = classify_result(
+                    item.get("type", "unknown"),
+                    item.get("target", "-"),
+                    item.get("data", {}),
+                )
+            for tag in tags or []:
+                rows.append([
+                    tag.get("severity", "-"),
+                    tag.get("title", "-"),
+                    tag.get("target") or item.get("target") or "-",
+                    tag.get("evidence") or "-",
+                    tag.get("description", "-"),
+                ])
+        return rows
+
+    @staticmethod
     def report_results_store(
         store: dict,
         output_file: Union[str, Path],
@@ -348,6 +370,12 @@ class HTMLReporter:
         targets_rows = [
             [item.get("target"), item.get("result_count")]
             for item in summary.get("targets_summary", [])
+        ]
+        risk_counts = summary.get("risk_counts", {})
+        risk_count_rows = [
+            ["Low", risk_counts.get("low", 0)],
+            ["Medium", risk_counts.get("medium", 0)],
+            ["High", risk_counts.get("high", 0)],
         ]
         generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -385,9 +413,18 @@ class HTMLReporter:
                 <div class="metric"><span>Session ID</span><strong>{escape(str(store.get("session_id", "-")))}</strong></div>
                 <div class="metric"><span>Total Results</span><strong>{escape(str(summary.get("total_results", 0)))}</strong></div>
                 <div class="metric"><span>Unique Targets</span><strong>{escape(str(summary.get("unique_targets", 0)))}</strong></div>
+                <div class="metric"><span>Risk Tags</span><strong>{escape(str(summary.get("total_risk_tags", 0)))}</strong></div>
             </div>
             <p><strong>Created:</strong> {escape(str(store.get("created_at", "-")))}</p>
             <p><strong>Updated:</strong> {escape(str(store.get("updated_at", "-")))}</p>
+        </section>
+        <section>
+            <h2>Risk Tag Counts</h2>
+            {HTMLReporter._render_table(["Severity", "Count"], risk_count_rows)}
+        </section>
+        <section>
+            <h2>Risk Tags</h2>
+            {HTMLReporter._render_table(["Severity", "Tag", "Target", "Evidence", "Description"], HTMLReporter._risk_rows(store))}
         </section>
         <section>
             <h2>Result Counts</h2>

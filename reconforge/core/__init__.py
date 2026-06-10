@@ -15,6 +15,7 @@ from reconforge.core.models import (
 )
 from reconforge.core.targets import TargetParser
 from reconforge.core.results_store import append_result, build_summary, clear_results_store, load_results_store
+from reconforge.core.risk_tags import classify_result
 
 __all__ = [
     "setup_logging",
@@ -34,4 +35,5 @@ __all__ = [
     "build_summary",
     "clear_results_store",
     "load_results_store",
+    "classify_result",
 ]

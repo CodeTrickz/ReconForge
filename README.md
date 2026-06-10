@@ -44,6 +44,7 @@ ReconForge v0.1 focuses on **safe, legal reconnaissance and reporting**:
 - **Port Scanning**: Async TCP connect scanning with bounded concurrency (no raw packets, no stealth)
 - **Banner Grabbing**: Safe service identification through banner analysis
 - **HTTP/TLS Analysis**: Passive status, redirect, security header, and certificate checks
+- **Risk Tagging**: Informational low/medium/high tags for observed metadata
 - **Target Parsing**: Support for IPv4 addresses, CIDR ranges, and hostnames
 - **Report Generation**: JSON export and beautiful HTML reports
 
@@ -93,6 +94,10 @@ reconforge report
 ```
 
 ReconForge automatically appends successful reconnaissance results to `.reconforge/session/results.json`. Running `reconforge report` without arguments generates a cumulative report in `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html`.
+
+Reports include informational risk tags derived only from observed metadata such as open ports, banners, TLS certificate dates, and missing HTTP security headers. These tags are defensive review hints, not exploit checks.
+
+Migration note: no CLI commands or flags changed. JSON and HTML reports now include additional risk tag fields and sections.
 
 ---
 
@@ -344,6 +349,10 @@ When no port list is specified, ReconForge scans these service ports:
 ## Automatic Results Storage
 
 ReconForge keeps a cumulative session file at `.reconforge/session/results.json`. Every successful `scan`, `ports`, `banner`, and `http` command appends a new entry while preserving previous results.
+
+Each stored result may include `risk_tags`, and the top-level summary includes `total_risk_tags` plus `risk_counts` for `low`, `medium`, and `high` informational tags.
+
+Existing session files remain usable. Older entries without `risk_tags` are classified when summaries and reports are generated.
 
 Generated cumulative reports are written to:
 

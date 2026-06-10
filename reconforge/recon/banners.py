@@ -40,9 +40,6 @@ class BannerGrabber:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             
-            # Determine protocol
-            protocol = "https" if port == 443 else "http"
-            
             try:
                 sock.connect((host, port))
                 

@@ -707,6 +707,7 @@ def results():
         store = load_results_store()
         summary = store.get("summary", {})
         counts = summary.get("result_counts", {})
+        risk_counts = summary.get("risk_counts", {})
 
         typer.echo("\n" + "=" * 60)
         typer.echo("RECONFORGE RESULTS STORE")
@@ -718,6 +719,14 @@ def results():
             ["Updated At", str(store.get("updated_at", "-"))],
             ["Total Results", str(summary.get("total_results", 0))],
             ["Unique Targets", str(summary.get("unique_targets", 0))],
+            ["Risk Tags", str(summary.get("total_risk_tags", 0))],
+            [
+                "Risk Counts",
+                ", ".join(
+                    f"{key}: {value}"
+                    for key, value in sorted(risk_counts.items())
+                ) or "-",
+            ],
             [
                 "Counts By Type",
                 ", ".join(f"{key}: {value}" for key, value in sorted(counts.items())) or "-",
@@ -758,7 +767,7 @@ def clear_results(
 @app.command()
 def version():
     """Show ReconForge version."""
-    typer.echo("ReconForge v0.1.1b1")
+    typer.echo("ReconForge v0.1.1b2")
     typer.echo("Authorized Security Reconnaissance Toolkit")
 
 

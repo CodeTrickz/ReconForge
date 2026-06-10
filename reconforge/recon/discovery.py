@@ -3,7 +3,7 @@
 import platform
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Set
+from typing import List
 
 from reconforge.core.logging import get_logger
 from reconforge.core.models import DiscoveryResult

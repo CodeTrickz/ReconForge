@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconforge"
-version = "0.1.1b1"
+version = "0.1.1b2"
 description = "A legal, modular cybersecurity reconnaissance toolkit for authorized pentests and security audits"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -81,5 +81,7 @@ line_length = 100
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "W"]
-ignore = ["E203", "W503"]
+ignore = ["E203", "E501", "W293"]

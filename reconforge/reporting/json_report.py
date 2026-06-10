@@ -1,11 +1,11 @@
 """JSON report generation for ReconForge."""
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Union
 
 from reconforge.core.logging import get_logger
+from reconforge.core.risk_tags import classify_result
 from reconforge.core.models import (
     ScanReport,
     PortListResult,
@@ -51,6 +51,7 @@ class JSONReporter:
                 "total_open_ports": scan_report.total_open_ports,
                 "total_hosts_scanned": len(scan_report.hosts),
             }
+        report_dict["risk_tags"] = classify_result("scan", scan_report.target, report_dict)
         
         with open(output_path, "w") as f:
             json.dump(report_dict, f, indent=2, default=str)
@@ -76,6 +77,7 @@ class JSONReporter:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         report_dict = port_result.model_dump(mode="json", exclude_none=True)
+        report_dict["risk_tags"] = classify_result("ports", port_result.target, report_dict)
         
         with open(output_path, "w") as f:
             json.dump(report_dict, f, indent=2, default=str)
@@ -101,6 +103,7 @@ class JSONReporter:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
         report_dict = banner_result.model_dump(mode="json", exclude_none=True)
+        report_dict["risk_tags"] = classify_result("banner", banner_result.target, report_dict)
         
         with open(output_path, "w") as f:
             json.dump(report_dict, f, indent=2, default=str)
@@ -118,6 +121,7 @@ class JSONReporter:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         report_dict = http_result.model_dump(mode="json", exclude_none=True)
+        report_dict["risk_tags"] = classify_result("http", http_result.target, report_dict)
 
         with open(output_path, "w") as f:
             json.dump(report_dict, f, indent=2, default=str)
