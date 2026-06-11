@@ -97,7 +97,8 @@ ReconForge automatically appends successful reconnaissance results to `.reconfor
 
 Reports include informational risk tags derived only from observed metadata such as open ports, banners, TLS certificate dates, and missing HTTP security headers. These tags are defensive review hints, not exploit checks.
 
-Migration note: no CLI commands or flags changed. JSON and HTML reports now include additional risk tag fields and sections.
+CLI note: scan, ports, banner, and http now support `--dry-run` and `--scope-file`. Console output now uses Rich tables and progress indicators, while JSON and HTML report schemas remain compatible.
+Migration note: existing command names are unchanged. If you install from source, `pip install -e .` now also pulls in `rich` for console rendering.
 
 ---
 
@@ -114,6 +115,8 @@ Perform full reconnaissance on a target network or host.
 - `--skip-discovery` - Skip ping sweep, scan only specified targets
 - `--json-output FILE` - Save results as JSON
 - `--html-output FILE` - Generate HTML report
+- `--dry-run` - Validate inputs and print the plan without network activity
+- `--scope-file FILE` - Refuse targets outside an authorized scope file
 
 **Examples:**
 ```bash
@@ -137,13 +140,15 @@ reconforge scan 192.168.1.1 --skip-discovery
 
 Scan for open ports on a specific target.
 
-The public CLI is unchanged. Internally, port scans use `asyncio` with bounded concurrency; `--workers` controls the maximum number of concurrent TCP connect attempts.
+Port scans use `asyncio` with bounded concurrency; `--workers` controls the maximum number of concurrent TCP connect attempts. The CLI now also supports `--dry-run` and `--scope-file`.
 
 **Options:**
 - `--ports LIST` - Ports to scan (e.g., 22,80,443 or 1-1024)
 - `--timeout SECONDS` - Connection timeout (default: 2.0)
 - `--workers N` - Maximum concurrent TCP connect attempts (default: 5)
 - `--json-output FILE` - Save results to JSON
+- `--dry-run` - Validate inputs and print the plan without network activity
+- `--scope-file FILE` - Refuse targets outside an authorized scope file
 
 **Examples:**
 ```bash
@@ -169,6 +174,8 @@ Grab service banners for version/service identification.
 - `--timeout SECONDS` - Connection timeout (default: 2.0)
 - `--workers N` - Parallel workers (default: 5)
 - `--json-output FILE` - Save results to JSON
+- `--dry-run` - Validate inputs and print the plan without network activity
+- `--scope-file FILE` - Refuse targets outside an authorized scope file
 
 **Examples:**
 ```bash
@@ -193,6 +200,8 @@ This command performs normal HTTP `HEAD` requests only. It checks status code, r
 - `--https` - Use HTTPS and inspect TLS certificate metadata
 - `--timeout SECONDS` - Connection timeout (default: 2.0)
 - `--json-output FILE` - Save results to JSON
+- `--dry-run` - Validate inputs and print the plan without network activity
+- `--scope-file FILE` - Refuse targets outside an authorized scope file
 
 **Examples:**
 ```bash

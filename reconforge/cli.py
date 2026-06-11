@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from reconforge.core import (
     setup_logging,
@@ -26,6 +29,7 @@ from reconforge.core.results_store import (
     load_results_store,
     load_results_store_from_path,
 )
+from reconforge.core.scope import AuthorizedScope
 from reconforge.core.sqlite_store import compare_snapshots, import_results_file, init_db
 from reconforge.recon import HostDiscovery, PortScanner, BannerGrabber, HTTPAnalyzer
 from reconforge.reporting import JSONReporter, HTMLReporter
@@ -33,6 +37,7 @@ from reconforge.reporting import JSONReporter, HTMLReporter
 # Set up logging
 setup_logging()
 logger = get_logger(__name__)
+console = Console()
 
 # Create Typer app
 app = typer.Typer(
@@ -83,6 +88,21 @@ def _validate_port(port: int) -> None:
         raise typer.BadParameter(f"Port out of range: {port}. Use 1-65535.")
 
 
+def _error(message: str) -> None:
+    """Print a consistent validation/runtime error."""
+    console.print(f"[bold red][!][/bold red] {message}")
+
+
+def _success(message: str) -> None:
+    """Print a consistent success message."""
+    console.print(f"[green][+][/green] {message}")
+
+
+def _info(message: str) -> None:
+    """Print a consistent progress message."""
+    console.print(f"[cyan][*][/cyan] {message}")
+
+
 def _resolve_single_host(host: str) -> str:
     """Validate or resolve a host argument to a single IPv4 address."""
     parser = TargetParser()
@@ -115,16 +135,45 @@ def _validate_http_host(host: str) -> str:
     return clean_host
 
 
+def _load_scope(scope_file: Optional[Path]) -> Optional[AuthorizedScope]:
+    """Load an optional authorization scope file."""
+    if scope_file is None:
+        return None
+    try:
+        return AuthorizedScope.from_file(scope_file)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
+
+def _assert_in_scope(
+    scope: Optional[AuthorizedScope],
+    target: str,
+    resolved_hosts: List[str],
+) -> None:
+    """Refuse targets outside the configured authorized scope."""
+    if scope is None:
+        return
+    try:
+        scope.assert_targets_allowed(target, resolved_hosts)
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
+
+def _print_dry_run(title: str, rows: List[List[str]]) -> None:
+    """Print a dry-run summary without performing network activity."""
+    console.print(f"\n[bold]{title} DRY RUN[/bold]")
+    _print_table([["Field", "Value"]] + rows)
+    console.print("[yellow]No network activity was performed.[/yellow]")
+
+
 def _print_table(rows: List[List[str]]) -> None:
-    """Print a small ASCII table."""
-    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
-    separator = "+-" + "-+-".join("-" * width for width in widths) + "-+"
-    typer.echo(separator)
-    for index, row in enumerate(rows):
-        typer.echo("| " + " | ".join(value.ljust(widths[col]) for col, value in enumerate(row)) + " |")
-        if index == 0:
-            typer.echo(separator)
-    typer.echo(separator)
+    """Print a small Rich table."""
+    table = Table(show_header=True, header_style="bold cyan")
+    for header in rows[0]:
+        table.add_column(header)
+    for row in rows[1:]:
+        table.add_row(*[str(value) for value in row])
+    console.print(table)
 
 
 def print_banner():
@@ -137,7 +186,7 @@ def print_banner():
     | WARNING: Use only on authorized systems!                           |
     +=====================================================================+
     """
-    typer.echo(banner, err=False)
+    console.print(banner)
 
 
 @db_app.command("init")
@@ -284,6 +333,16 @@ def scan(
         "--html-output",
         help="Generate HTML report"
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate inputs and show the planned scan without network activity",
+    ),
+    scope_file: Optional[Path] = typer.Option(
+        None,
+        "--scope-file",
+        help="File containing authorized IPv4 hosts, CIDRs, or hostnames",
+    ),
 ):
     """Scan a target for live hosts and open ports.
     
@@ -300,65 +359,100 @@ def scan(
         _validate_workers(workers)
         
         # Parse target
-        typer.echo(f"[*] Parsing target: {target}")
+        scope = _load_scope(scope_file)
+
+        _info(f"Parsing target: {target}")
         parser = TargetParser()
         try:
             targets = parser.parse_target(target)
         except ValueError as e:
-            typer.echo(f"[!] Invalid target: {e}", err=True)
+            _error(f"Invalid target: {e}")
             raise typer.Exit(1)
-        
-        typer.echo(f"[+] Found {len(targets)} target(s)")
+        _assert_in_scope(scope, target, targets)
+
+        _success(f"Found {len(targets)} target(s)")
         
         # Parse ports if specified
         scan_ports = DEFAULT_PORTS
         if ports:
             try:
                 scan_ports = parser.parse_ports(ports)
-                typer.echo(f"[+] Scanning {len(scan_ports)} specified ports")
+                _success(f"Scanning {len(scan_ports)} specified ports")
             except ValueError as e:
-                typer.echo(f"[!] Error parsing ports: {e}", err=True)
+                _error(f"Error parsing ports: {e}")
                 raise typer.Exit(1)
+
+        if dry_run:
+            _print_dry_run(
+                "SCAN",
+                [
+                    ["Target", target],
+                    ["Resolved Targets", str(len(targets))],
+                    ["Ports", ", ".join(str(port) for port in scan_ports)],
+                    ["Host Discovery", "enabled" if not skip_discovery else "skipped"],
+                    ["Workers", str(workers)],
+                    ["Timeout", f"{timeout}s"],
+                    ["Scope File", str(scope_file) if scope_file else "-"],
+                ],
+            )
+            return
         
         # Host discovery
         scan_start = datetime.now()
         hosts_to_scan = targets
         
         if not skip_discovery:
-            typer.echo("[*] Running host discovery (ping sweep)...")
+            _info("Running host discovery (ping sweep)...")
             discovery = HostDiscovery(timeout=timeout)
-            discovery_result = discovery.discover(targets, workers=workers)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True,
+                console=console,
+            ) as progress:
+                progress.add_task("Discovering live hosts", total=None)
+                discovery_result = discovery.discover(targets, workers=workers)
             hosts_to_scan = discovery_result.alive_hosts
-            typer.echo(
-                f"[+] Discovery complete: {len(hosts_to_scan)} alive, "
+            _success(
+                f"Discovery complete: {len(hosts_to_scan)} alive, "
                 f"{len(discovery_result.dead_hosts)} dead"
             )
         
         # Port scanning
-        typer.echo(f"[*] Scanning ports on {len(hosts_to_scan)} host(s)...")
+        _info(f"Scanning ports on {len(hosts_to_scan)} host(s)...")
         scanner = PortScanner(timeout=timeout)
         
         # Collect results
         all_hosts = []
-        for host in hosts_to_scan:
-            typer.echo(f"  [*] Scanning {host}...", err=False)
-            result = scanner.scan(host, ports=scan_ports, workers=workers)
-            
-            host_info = HostInfo(
-                ip_address=host,
-                alive=True,
-                open_ports=[
-                    PortScanResult(
-                        port=p.port,
-                        open=p.open,
-                        service=p.service,
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Scanning hosts", total=len(hosts_to_scan))
+            for host in hosts_to_scan:
+                progress.update(task, description=f"Scanning {host}")
+                result = scanner.scan(host, ports=scan_ports, workers=workers)
+
+                host_info = HostInfo(
+                    ip_address=host,
+                    alive=True,
+                    open_ports=[
+                        PortScanResult(
+                            port=p.port,
+                            open=p.open,
+                            service=p.service,
+                        )
+                        for p in result.open_ports
+                        if p.open
+                    ]
+                )
+                all_hosts.append(host_info)
+                progress.advance(task)
+                if host_info.open_ports:
+                    _success(
+                        f"{host}: found {len(host_info.open_ports)} open port(s)"
                     )
-                    for p in result.open_ports
-                    if p.open
-                ]
-            )
-            all_hosts.append(host_info)
-            typer.echo(f"    [+] Found {len(host_info.open_ports)} open ports")
         
         # Create scan report
         scan_end = datetime.now()
@@ -386,20 +480,27 @@ def scan(
         )
         
         # Print summary
-        typer.echo("\n" + "="*60)
-        typer.echo("SCAN SUMMARY")
-        typer.echo("="*60)
-        typer.echo(f"Target: {target}")
-        typer.echo(f"Duration: {scan_report.duration:.2f}s")
-        typer.echo(f"Hosts discovered: {scan_report.alive_hosts_count}")
-        typer.echo(f"Total open ports: {scan_report.total_open_ports}")
+        console.print("\n[bold]SCAN SUMMARY[/bold]")
+        _print_table(
+            [
+                ["Field", "Value"],
+                ["Target", target],
+                ["Duration", f"{scan_report.duration:.2f}s"],
+                ["Hosts Discovered", str(scan_report.alive_hosts_count)],
+                ["Total Open Ports", str(scan_report.total_open_ports)],
+            ]
+        )
         
         if scan_report.hosts:
-            typer.echo("\nHosts with open ports:")
+            host_rows = [["Host", "Open Ports"]]
             for host in scan_report.hosts:
-                if host.open_ports:
-                    ports_str = ", ".join([str(p.port) for p in host.open_ports])
-                    typer.echo(f"  {host.ip_address}: {ports_str}")
+                ports_str = ", ".join(
+                    f"{p.port}/{p.service}" if p.service else str(p.port)
+                    for p in host.open_ports
+                )
+                host_rows.append([host.ip_address, ports_str or "No open ports found"])
+            console.print("\n[bold]Host Results[/bold]")
+            _print_table(host_rows)
 
         append_result(
             "scan",
@@ -407,26 +508,26 @@ def scan(
             scan_report.model_dump(mode="json", exclude_none=True),
             command=f"reconforge scan {target}",
         )
-        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
+        _success(f"Result appended to {RESULTS_JSON}")
         
         # Save reports
         if json_output:
             JSONReporter.report_scan(scan_report, json_output)
-            typer.echo(f"\n[+] JSON report saved to {json_output}")
+            _success(f"JSON report saved to {json_output}")
         
         if html_output:
             HTMLReporter().report_scan(scan_report, html_output)
-            typer.echo(f"[+] HTML report saved to {html_output}")
+            _success(f"HTML report saved to {html_output}")
         
-        typer.echo("\n[+] Scan complete!")
+        _success("Scan complete!")
         
     except typer.Exit:
         raise
     except typer.BadParameter as e:
-        typer.echo(f"[!] Invalid input: {e}", err=True)
+        _error(f"Invalid input: {e}")
         raise typer.Exit(1)
     except Exception as e:
-        typer.echo(f"[!] Error: {e}", err=True)
+        _error(f"Error: {e}")
         logger.exception("Scan failed")
         raise typer.Exit(1)
 
@@ -454,6 +555,16 @@ def ports(
         "--json-output",
         help="Save results as JSON file"
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate inputs and show the planned port scan without network activity",
+    ),
+    scope_file: Optional[Path] = typer.Option(
+        None,
+        "--scope-file",
+        help="File containing authorized IPv4 hosts, CIDRs, or hostnames",
+    ),
 ):
     """Scan ports on a specific host.
     
@@ -468,12 +579,14 @@ def ports(
         # Validate input parameters
         _validate_timeout(timeout)
         _validate_workers(workers)
+        scope = _load_scope(scope_file)
         
         parser = TargetParser()
         original_host = host
         host = _resolve_single_host(host)
+        _assert_in_scope(scope, original_host, [host])
         if host != original_host:
-            typer.echo(f"[+] Resolved {original_host} to: {host}")
+            _success(f"Resolved {original_host} to: {host}")
         
         # Parse ports
         scan_ports = DEFAULT_PORTS
@@ -481,27 +594,47 @@ def ports(
             try:
                 scan_ports = parser.parse_ports(ports_spec)
             except ValueError as e:
-                typer.echo(f"[!] Error parsing ports: {e}", err=True)
+                _error(f"Error parsing ports: {e}")
                 raise typer.Exit(1)
+
+        if dry_run:
+            _print_dry_run(
+                "PORT SCAN",
+                [
+                    ["Host", original_host],
+                    ["Resolved Host", host],
+                    ["Ports", ", ".join(str(port) for port in scan_ports)],
+                    ["Workers", str(workers)],
+                    ["Timeout", f"{timeout}s"],
+                    ["Scope File", str(scope_file) if scope_file else "-"],
+                ],
+            )
+            return
         
         # Scan ports
-        typer.echo(f"[*] Scanning {len(scan_ports)} ports on {host}...")
+        _info(f"Scanning {len(scan_ports)} ports on {host}...")
         scanner = PortScanner(timeout=timeout)
-        result = scanner.scan(host, ports=scan_ports, workers=workers)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+            console=console,
+        ) as progress:
+            progress.add_task("Running TCP connect checks", total=None)
+            result = scanner.scan(host, ports=scan_ports, workers=workers)
         
         # Display results
-        typer.echo("\n" + "="*60)
-        typer.echo(f"PORT SCAN RESULTS FOR {host}")
-        typer.echo("="*60)
+        console.print(f"\n[bold]PORT SCAN RESULTS FOR {host}[/bold]")
         
         if result.open_ports:
-            typer.echo(f"\n[+] Found {len(result.open_ports)} open port(s):\n")
+            _success(f"Found {len(result.open_ports)} open port(s)")
+            rows = [["Port", "Service"]]
             for port in result.open_ports:
                 if port.open:
-                    service = f" ({port.service})" if port.service else ""
-                    typer.echo(f"  {port.port:5d}{service}")
+                    rows.append([str(port.port), port.service or "-"])
+            _print_table(rows)
         else:
-            typer.echo("\n[-] No open ports found")
+            console.print("[yellow]No open ports found[/yellow]")
 
         append_result(
             "ports",
@@ -509,20 +642,20 @@ def ports(
             result.model_dump(mode="json", exclude_none=True),
             command=f"reconforge ports {original_host}",
         )
-        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
+        _success(f"Result appended to {RESULTS_JSON}")
         
         # Save JSON if requested
         if json_output:
             JSONReporter.report_ports(result, json_output)
-            typer.echo(f"\n[+] Results saved to {json_output}")
+            _success(f"Results saved to {json_output}")
         
     except typer.Exit:
         raise
     except typer.BadParameter as e:
-        typer.echo(f"[!] Invalid input: {e}", err=True)
+        _error(f"Invalid input: {e}")
         raise typer.Exit(1)
     except Exception as e:
-        typer.echo(f"[!] Error: {e}", err=True)
+        _error(f"Error: {e}")
         logger.exception("Port scan failed")
         raise typer.Exit(1)
 
@@ -550,6 +683,16 @@ def banner(
         "--json-output",
         help="Save results as JSON file"
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate inputs and show the planned banner grab without network activity",
+    ),
+    scope_file: Optional[Path] = typer.Option(
+        None,
+        "--scope-file",
+        help="File containing authorized IPv4 hosts, CIDRs, or hostnames",
+    ),
 ):
     """Grab service banners for identification.
     
@@ -564,41 +707,71 @@ def banner(
         # Validate input parameters
         _validate_timeout(timeout)
         _validate_workers(workers)
+        scope = _load_scope(scope_file)
         
         original_host = host
         host = _resolve_single_host(host)
+        _assert_in_scope(scope, original_host, [host])
         if host != original_host:
-            typer.echo(f"[+] Resolved {original_host} to: {host}")
+            _success(f"Resolved {original_host} to: {host}")
         
         # Validate ports
         if not port:
-            typer.echo("[!] No ports specified. Use --port to specify port(s).", err=True)
+            _error("No ports specified. Use --port to specify port(s).")
             raise typer.Exit(1)
         for item in port:
             _validate_port(item)
         port = sorted(set(port))
+
+        if dry_run:
+            _print_dry_run(
+                "BANNER GRAB",
+                [
+                    ["Host", original_host],
+                    ["Resolved Host", host],
+                    ["Ports", ", ".join(str(item) for item in port)],
+                    ["Workers", str(workers)],
+                    ["Timeout", f"{timeout}s"],
+                    ["Scope File", str(scope_file) if scope_file else "-"],
+                ],
+            )
+            return
         
         # Grab banners
-        typer.echo(f"[*] Grabbing banners from {len(port)} port(s) on {host}...")
+        _info(f"Grabbing banners from {len(port)} port(s) on {host}...")
         grabber = BannerGrabber(timeout=timeout)
-        result = grabber.grab_banners(host, port, workers=workers)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+            console=console,
+        ) as progress:
+            progress.add_task("Requesting service banners", total=None)
+            result = grabber.grab_banners(host, port, workers=workers)
         
         # Display results
-        typer.echo("\n" + "="*60)
-        typer.echo(f"BANNER GRAB RESULTS FOR {host}")
-        typer.echo("="*60)
+        console.print(f"\n[bold]BANNER GRAB RESULTS FOR {host}[/bold]")
         
         if result.ports:
+            rows = [["Port", "Service", "Banner", "HTTP Headers"]]
             for banner_info in result.ports:
-                typer.echo(f"\n[*] Port {banner_info.port}:")
-                if banner_info.banner:
-                    typer.echo(f"  Banner: {banner_info.banner[:200]}")
+                headers = "-"
                 if banner_info.http_headers:
-                    typer.echo("  HTTP Headers:")
-                    for key, value in list(banner_info.http_headers.items())[:5]:
-                        typer.echo(f"    {key}: {value}")
+                    headers = ", ".join(
+                        f"{key}: {value}"
+                        for key, value in list(banner_info.http_headers.items())[:5]
+                    )
+                rows.append(
+                    [
+                        str(banner_info.port),
+                        banner_info.service or "-",
+                        (banner_info.banner or "-")[:200],
+                        headers,
+                    ]
+                )
+            _print_table(rows)
         else:
-            typer.echo("\n[-] No banners grabbed")
+            console.print("[yellow]No banners grabbed[/yellow]")
 
         append_result(
             "banner",
@@ -606,20 +779,20 @@ def banner(
             result.model_dump(mode="json", exclude_none=True),
             command=f"reconforge banner {original_host}",
         )
-        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
+        _success(f"Result appended to {RESULTS_JSON}")
         
         # Save JSON if requested
         if json_output:
             JSONReporter.report_banners(result, json_output)
-            typer.echo(f"\n[+] Results saved to {json_output}")
+            _success(f"Results saved to {json_output}")
         
     except typer.Exit:
         raise
     except typer.BadParameter as e:
-        typer.echo(f"[!] Invalid input: {e}", err=True)
+        _error(f"Invalid input: {e}")
         raise typer.Exit(1)
     except Exception as e:
-        typer.echo(f"[!] Error: {e}", err=True)
+        _error(f"Error: {e}")
         logger.exception("Banner grab failed")
         raise typer.Exit(1)
 
@@ -647,6 +820,16 @@ def http(
         "--json-output",
         help="Save results as JSON file"
     ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Validate inputs and show the planned HTTP/TLS analysis without network activity",
+    ),
+    scope_file: Optional[Path] = typer.Option(
+        None,
+        "--scope-file",
+        help="File containing authorized IPv4 hosts, CIDRs, or hostnames",
+    ),
 ):
     """Analyze HTTP headers and TLS certificate metadata safely.
 
@@ -663,16 +846,37 @@ def http(
     try:
         _validate_timeout(timeout)
         _validate_port(port)
+        scope = _load_scope(scope_file)
         host = _validate_http_host(host)
+        resolved_hosts = TargetParser().parse_target(host)
+        _assert_in_scope(scope, host, resolved_hosts)
 
         scheme = "https" if https else "http"
-        typer.echo(f"[*] Analyzing {scheme}://{host}:{port} with HTTP HEAD requests...")
-        analyzer = HTTPAnalyzer(timeout=timeout)
-        result = analyzer.analyze(host=host, port=port, https=https)
+        if dry_run:
+            _print_dry_run(
+                "HTTP/TLS ANALYSIS",
+                [
+                    ["URL", f"{scheme}://{host}:{port}"],
+                    ["Resolved Hosts", ", ".join(resolved_hosts)],
+                    ["TLS Inspection", "enabled" if https else "disabled"],
+                    ["Timeout", f"{timeout}s"],
+                    ["Scope File", str(scope_file) if scope_file else "-"],
+                ],
+            )
+            return
 
-        typer.echo("\n" + "=" * 60)
-        typer.echo(f"HTTP/TLS ANALYSIS FOR {host}:{port}")
-        typer.echo("=" * 60)
+        _info(f"Analyzing {scheme}://{host}:{port} with HTTP HEAD requests...")
+        analyzer = HTTPAnalyzer(timeout=timeout)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+            console=console,
+        ) as progress:
+            progress.add_task("Collecting HTTP/TLS metadata", total=None)
+            result = analyzer.analyze(host=host, port=port, https=https)
+
+        console.print(f"\n[bold]HTTP/TLS ANALYSIS FOR {host}:{port}[/bold]")
 
         rows = [
             ["Field", "Value"],
@@ -708,19 +912,19 @@ def http(
             result.model_dump(mode="json", exclude_none=True),
             command=f"reconforge http {host}",
         )
-        typer.echo(f"\n[+] Result appended to {RESULTS_JSON}")
+        _success(f"Result appended to {RESULTS_JSON}")
 
         if json_output:
             JSONReporter.report_http(result, json_output)
-            typer.echo(f"\n[+] Results saved to {json_output}")
+            _success(f"Results saved to {json_output}")
 
     except typer.Exit:
         raise
     except typer.BadParameter as e:
-        typer.echo(f"[!] Invalid input: {e}", err=True)
+        _error(f"Invalid input: {e}")
         raise typer.Exit(1)
     except Exception as e:
-        typer.echo(f"[!] Error: {e}", err=True)
+        _error(f"Error: {e}")
         logger.exception("HTTP analysis failed")
         raise typer.Exit(1)
 
@@ -899,7 +1103,7 @@ def compare(
 @app.command()
 def version():
     """Show ReconForge version."""
-    typer.echo("ReconForge v0.1.1b3")
+    typer.echo("ReconForge v0.1.1b4")
     typer.echo("Authorized Security Reconnaissance Toolkit")
 
 

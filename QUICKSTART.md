@@ -50,7 +50,8 @@ Reports are written to `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.j
 
 Reports include informational low/medium/high risk tags for observed metadata such as open ports, banners, TLS certificate expiry, and missing HTTP security headers. These are defensive review hints only and do not involve exploit logic.
 
-No commands or flags changed. The only output change is that JSON/HTML reports include risk tag data.
+CLI note: `scan`, `ports`, `banner`, and `http` now support `--dry-run` and `--scope-file`. Console output also uses richer progress and summary tables.
+Migration note: command names stay the same. A fresh `pip install -e .` now installs `rich` as part of the normal runtime dependencies.
 
 ### Example 1: Scan Your Local Network (192.168.1.0/24)
 
@@ -84,7 +85,19 @@ reconforge ports 192.168.1.100 --ports 1-1024
 reconforge ports 192.168.1.100 --json-output ports.json
 ```
 
-Port scans use async TCP connect checks with bounded concurrency. The CLI remains the same; `--workers` controls the maximum number of concurrent connection attempts.
+Port scans use async TCP connect checks with bounded concurrency; `--workers` controls the maximum number of concurrent connection attempts.
+
+### Authorized Scope Files and Dry Runs
+
+```bash
+# Validate a target against an authorized scope file without touching the network
+reconforge scan 192.168.1.0/24 --scope-file authorized.txt --dry-run
+
+# Scope files can contain IPv4 hosts, CIDRs, or resolvable hostnames
+reconforge http internal.example.com --https --scope-file authorized.txt --dry-run
+```
+
+Each scope file should contain one authorized host, CIDR, or hostname per line. Targets outside that scope are refused before any network activity starts.
 
 ### Example 3: Grab Service Banners
 

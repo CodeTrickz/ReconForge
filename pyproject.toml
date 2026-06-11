@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reconforge"
-version = "0.1.1b3"
+version = "0.1.1b4"
 description = "A legal, modular cybersecurity reconnaissance toolkit for authorized pentests and security audits"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -36,6 +36,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "jinja2>=3.1.0",
     "python-dateutil>=2.8.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
