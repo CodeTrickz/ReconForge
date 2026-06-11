@@ -26,6 +26,7 @@ from reconforge.core.results_store import (
     load_results_store,
     load_results_store_from_path,
 )
+from reconforge.core.sqlite_store import compare_snapshots, import_results_file, init_db
 from reconforge.recon import HostDiscovery, PortScanner, BannerGrabber, HTTPAnalyzer
 from reconforge.reporting import JSONReporter, HTMLReporter
 
@@ -39,6 +40,11 @@ app = typer.Typer(
     help="ReconForge - Legal Security Reconnaissance Toolkit",
     rich_markup_mode="rich",
 )
+db_app = typer.Typer(
+    name="db",
+    help="SQLite storage commands for imported ReconForge result snapshots",
+)
+app.add_typer(db_app, name="db")
 
 
 def _validate_timeout(timeout: float) -> None:
@@ -132,6 +138,114 @@ def print_banner():
     +=====================================================================+
     """
     typer.echo(banner, err=False)
+
+
+@db_app.command("init")
+def db_init():
+    """Initialize the SQLite storage backend."""
+    try:
+        path = init_db()
+        typer.echo(f"[+] SQLite database initialized: {path}")
+    except Exception as e:
+        typer.echo(f"[!] Error: {e}", err=True)
+        logger.exception("Database initialization failed")
+        raise typer.Exit(1)
+
+
+@db_app.command("import")
+def db_import(
+    results_file: Path = typer.Argument(..., help="Cumulative ReconForge results JSON file"),
+):
+    """Import a cumulative results JSON file into SQLite."""
+    try:
+        snapshot_id = import_results_file(results_file)
+        typer.echo(f"[+] Imported {results_file} as snapshot ID {snapshot_id}")
+    except FileNotFoundError:
+        typer.echo(f"[!] Results file not found: {results_file}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"[!] Error: {e}", err=True)
+        logger.exception("Database import failed")
+        raise typer.Exit(1)
+
+
+def _print_compare_results(diff: dict) -> None:
+    typer.echo("\n" + "=" * 60)
+    typer.echo(f"COMPARE SNAPSHOTS {diff['baseline_id']} -> {diff['current_id']}")
+    typer.echo("=" * 60)
+
+    opened = diff.get("newly_opened_ports", [])
+    closed = diff.get("closed_ports", [])
+    banners = diff.get("changed_banners", [])
+    tls_changes = diff.get("changed_tls_metadata", [])
+
+    typer.echo("\nNewly opened ports:")
+    if opened:
+        _print_table(
+            [["Target", "Host", "Port", "Service"]]
+            + [
+                [
+                    item.get("target", "-"),
+                    item.get("host", "-"),
+                    str(item.get("port", "-")),
+                    str(item.get("service") or "-"),
+                ]
+                for item in opened
+            ]
+        )
+    else:
+        typer.echo("none")
+
+    typer.echo("\nClosed ports:")
+    if closed:
+        _print_table(
+            [["Closed Target", "Host", "Port", "Service"]]
+            + [
+                [
+                    item.get("target", "-"),
+                    item.get("host", "-"),
+                    str(item.get("port", "-")),
+                    str(item.get("service") or "-"),
+                ]
+                for item in closed
+            ]
+        )
+    else:
+        typer.echo("none")
+
+    typer.echo("\nChanged banners:")
+    if banners:
+        _print_table(
+            [["Banner Target", "Port", "Baseline", "Current"]]
+            + [
+                [
+                    item.get("target", "-"),
+                    str(item.get("port", "-")),
+                    str(item.get("baseline", "-"))[:80],
+                    str(item.get("current", "-"))[:80],
+                ]
+                for item in banners
+            ]
+        )
+    else:
+        typer.echo("none")
+
+    typer.echo("\nChanged TLS metadata:")
+    if tls_changes:
+        _print_table(
+            [["TLS Target", "Port", "Baseline not_after", "Current not_after"]]
+            + [
+                [
+                    item.get("target", "-"),
+                    str(item.get("port", "-")),
+                    str(item.get("baseline", {}).get("not_after") or "-"),
+                    str(item.get("current", {}).get("not_after") or "-"),
+                ]
+                for item in tls_changes
+            ]
+        )
+    else:
+        typer.echo("none")
 
 
 @app.command()
@@ -765,9 +879,27 @@ def clear_results(
 
 
 @app.command()
+def compare(
+    baseline: int = typer.Option(..., "--baseline", help="Baseline snapshot ID"),
+    current: int = typer.Option(..., "--current", help="Current snapshot ID"),
+):
+    """Compare two imported SQLite snapshots."""
+    try:
+        diff = compare_snapshots(baseline, current)
+        _print_compare_results(diff)
+    except ValueError as e:
+        typer.echo(f"[!] {e}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"[!] Error: {e}", err=True)
+        logger.exception("Snapshot comparison failed")
+        raise typer.Exit(1)
+
+
+@app.command()
 def version():
     """Show ReconForge version."""
-    typer.echo("ReconForge v0.1.1b2")
+    typer.echo("ReconForge v0.1.1b3")
     typer.echo("Authorized Security Reconnaissance Toolkit")
 
 

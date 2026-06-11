@@ -251,6 +251,33 @@ reconforge clear-results
 reconforge clear-results --yes
 ```
 
+### `reconforge db init`
+
+Initialize the SQLite snapshot database at `.reconforge/reconforge.db`.
+
+**Examples:**
+```bash
+reconforge db init
+```
+
+### `reconforge db import <RESULTS-JSON>`
+
+Import a cumulative results JSON file as a SQLite snapshot. The command prints the snapshot ID used by `reconforge compare`.
+
+**Examples:**
+```bash
+reconforge db import .reconforge/session/results.json
+```
+
+### `reconforge compare --baseline ID --current ID`
+
+Compare two imported SQLite snapshots. The comparison reports newly opened ports, closed ports, changed banners, and changed TLS certificate metadata.
+
+**Examples:**
+```bash
+reconforge compare --baseline 1 --current 2
+```
+
 ---
 
 ## Examples
@@ -375,6 +402,16 @@ reconforge report
 Use `reconforge report --clear` to clear the cumulative store after a successful report, or `reconforge clear-results` / `reconforge clear-results --yes` to reset it manually.
 
 Explicit `--json-output` files are still supported for individual commands, but they are optional.
+
+SQLite snapshots are stored in `.reconforge/reconforge.db`. Import one or more cumulative JSON files with `reconforge db import`, then compare snapshot IDs with `reconforge compare --baseline ID --current ID`.
+
+### SQLite Snapshot Notes
+
+- **What changed:** ReconForge can now store cumulative results JSON files as SQLite snapshots and compare two imported snapshots over time.
+- **CLI changes:** new `reconforge db init`, `reconforge db import <RESULTS-JSON>`, and `reconforge compare --baseline ID --current ID` commands were added.
+- **Output format:** existing scan, port, banner, HTTP, JSON report, and HTML report outputs are unchanged. The new compare output lists newly opened ports, closed ports, changed banners, and changed TLS metadata.
+- **Config and storage:** SQLite data is written to `.reconforge/reconforge.db`; no additional configuration is required.
+- **Migration:** existing cumulative JSON files remain valid. Import them with `reconforge db import` when you want persistent snapshot IDs for comparison.
 
 ---
 

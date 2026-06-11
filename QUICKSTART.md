@@ -129,6 +129,27 @@ reconforge clear-results
 reconforge clear-results --yes
 ```
 
+### Example 6: Import and Compare Stored Results
+
+```bash
+# Initialize the SQLite snapshot database
+reconforge db init
+
+# Import cumulative JSON files as snapshots
+reconforge db import .reconforge/session/results.json
+reconforge db import previous_results.json
+
+# Compare imported snapshot IDs
+reconforge compare --baseline 1 --current 2
+```
+
+The compare command reports newly opened ports, closed ports, changed banners, and changed TLS certificate metadata. It does not scan targets; it only compares imported results.
+
+Notes:
+- Existing scan, port, banner, HTTP, JSON report, and HTML report commands keep their current behavior.
+- SQLite snapshots are stored in `.reconforge/reconforge.db`.
+- Existing cumulative results JSON files do not need migration; import them with `reconforge db import` when you want to compare snapshots.
+
 ## Advanced Examples
 
 ### Detailed Network Scan with Custom Settings
@@ -229,6 +250,7 @@ For port scanning, `--workers` changes concurrency only. ReconForge still uses n
 ## Output Files
 
 - **Cumulative Store**: `.reconforge/session/results.json`
+- **SQLite Snapshots**: `.reconforge/reconforge.db`
 - **Timestamped Reports**: `reports/reconforge_report_<YYYYMMDD_HHMMSS>.html` or `.json`
 - **Risk Tags**: Stored per result under `risk_tags`, with summary counts in report JSON
 - **Explicit JSON Output**: Optional command-specific files from `--json-output`

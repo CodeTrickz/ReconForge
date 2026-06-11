@@ -7,6 +7,7 @@ RUNTIME_DIR = Path(".reconforge")
 SESSION_DIR = Path(".reconforge/session")
 RESULTS_JSON = Path(".reconforge/session/results.json")
 REPORTS_DIR = Path("reports")
+SQLITE_DB = Path(".reconforge/reconforge.db")
 
 
 def ensure_runtime_dirs() -> None:

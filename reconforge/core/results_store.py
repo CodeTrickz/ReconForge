@@ -17,7 +17,7 @@ def _new_store() -> dict:
         "created_at": now,
         "updated_at": now,
         "tool": "ReconForge",
-        "version": "0.1.1b2",
+        "version": "0.1.1b3",
         "results": [],
         "summary": {},
     }
@@ -40,7 +40,7 @@ def load_results_store() -> dict:
     store.setdefault("session_id", timestamp_slug())
     store.setdefault("created_at", timestamp_iso())
     store.setdefault("tool", "ReconForge")
-    store.setdefault("version", "0.1.1b2")
+    store.setdefault("version", "0.1.1b3")
     store.setdefault("results", [])
     store["summary"] = build_summary(store)
     store.setdefault("updated_at", store["created_at"])
